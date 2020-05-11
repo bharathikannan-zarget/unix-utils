@@ -1,0 +1,38 @@
+if [[ -z "$1" ]]
+then
+	echo "Pass Java process name"
+	exit 61
+fi
+
+java_process=$(jps | grep $1 | awk '{print $1}')
+
+if [[ -z "$java_process" ]]
+then
+	echo "Java process not running"
+	exit 0
+fi
+
+
+top -n 1 -H -p 6549 -b | sed 1,7d | head -n 20 > .high_cpu_threads
+echo $high_cpu_threads
+
+echo "Taking Thread Dump"
+
+jstack -l $java_process > .thread_dump
+
+> thread_analysis.txt
+
+### Utility function to convert decimal to hexadecimal. Java thread ids will be in hexadecimal.
+to_hex() {
+	echo "obase=16; $1" | bc | tr '[:upper:]' '[:lower:]'
+}
+
+cat .high_cpu_threads | while read line
+do
+	thread_id=$(echo "$line" | awk '{print $1}')
+	cpu_utilization=$(echo "$line" | awk '{print $9}')
+	thread_hex=$(to_hex "$thread_id")
+	echo "### Thread: $thread_hex , Cpu Utilized : $cpu_utilization ###" >> thread_analysis.txt
+	sed -n "/0x$thread_hex/,/^$/p" .thread_dump >> thread_analysis.txt
+	echo "#---------------------------------------------------------------------------#" >> thread_analysis.txt
+done
